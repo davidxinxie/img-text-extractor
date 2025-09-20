@@ -86,6 +86,40 @@ This tool automatically analyzes image content using OpenAI Vision API and write
 ./main.py ~/Pictures --force
 ```
 
+## GitHub Automation
+
+The tool includes GitHub automation features for efficient repository management:
+
+### Setup GitHub Token
+```bash
+# Interactive token setup
+./github_sync.py setup
+
+# Or use quick setup script
+./quick_setup.sh
+```
+
+### GitHub Operations
+```bash
+# Test GitHub API connection
+./github_sync.py test
+
+# Upload single file
+./github_sync.py upload --file README.md --github-path README.md --message "Update documentation"
+
+# Sync entire repository
+./github_sync.py sync --message "Auto-sync repository updates"
+
+# Force update existing file
+./github_sync.py upload --file config.py --github-path config.py --message "Update config" --force
+```
+
+### GitHub Token Requirements
+1. Visit: https://github.com/settings/tokens
+2. Click "Generate new token (classic)"
+3. Select scope: `repo` (Full control of private repositories)
+4. Copy the generated token and use it in setup
+
 ## Supported Image Formats
 
 - JPEG (.jpg, .jpeg)
@@ -245,6 +279,40 @@ MIT License
 # 重新处理所有图片（包括已有metadata的）
 ./main.py ~/Pictures --force
 ```
+
+## GitHub自动化
+
+工具包含GitHub自动化功能，实现高效的仓库管理：
+
+### 设置GitHub Token
+```bash
+# 交互式token设置
+./github_sync.py setup
+
+# 或使用快速设置脚本
+./quick_setup.sh
+```
+
+### GitHub操作
+```bash
+# 测试GitHub API连接
+./github_sync.py test
+
+# 上传单个文件
+./github_sync.py upload --file README.md --github-path README.md --message "更新文档"
+
+# 同步整个仓库
+./github_sync.py sync --message "自动同步仓库更新"
+
+# 强制更新已存在的文件
+./github_sync.py upload --file config.py --github-path config.py --message "更新配置" --force
+```
+
+### GitHub Token要求
+1. 访问: https://github.com/settings/tokens
+2. 点击 "Generate new token (classic)"
+3. 选择权限: `repo` (完全控制私有仓库)
+4. 复制生成的token并在设置中使用
 
 ## 支持的图片格式
 
