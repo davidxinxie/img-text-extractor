@@ -14,6 +14,7 @@ The codebase consists of four main modules:
 - `vision.py` - OpenAI Vision API integration for image analysis
 - `metadata.py` - Metadata writing using exiftool and keyword extraction
 - `config.py` - Configuration management and prompts
+- `github_sync.py` - GitHub API integration for automated repository updates
 
 ## Key Dependencies
 
@@ -138,4 +139,22 @@ chmod +x main.py
 
 # Debug specific functionality
 python -c "from main import find_images; print(find_images('test_dir', recursive=False))"
+```
+
+### GitHub Automation Commands
+```bash
+# Setup GitHub Personal Access Token
+./github_sync.py setup
+
+# Test GitHub API connection
+./github_sync.py test
+
+# Upload single file to GitHub
+./github_sync.py upload --file README.md --github-path README.md --message "Update documentation"
+
+# Sync entire repository to GitHub
+./github_sync.py sync --message "Auto-sync repository updates"
+
+# Force update existing file
+./github_sync.py upload --file config.py --github-path config.py --message "Update config" --force
 ```
