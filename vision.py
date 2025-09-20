@@ -3,7 +3,7 @@ import os
 from typing import Optional
 from PIL import Image
 from openai import OpenAI
-from config import OPENAI_API_KEY, VISION_PROMPT, SUPPORTED_IMAGE_FORMATS
+from config import OPENAI_API_KEY, VISION_PROMPT, SCREENSHOT_VISION_PROMPT, SUPPORTED_IMAGE_FORMATS
 
 # 启用HEIC/HEIF支持
 try:
@@ -58,8 +58,13 @@ class ImageAnalyzer:
         except Exception as e:
             raise ValueError(f"无法读取图片 {image_path}: {str(e)}")
     
-    def analyze_image(self, image_path: str) -> Optional[str]:
-        """分析单张图片并返回描述"""
+    def analyze_image(self, image_path: str, screenshot_mode: bool = False) -> Optional[str]:
+        """分析单张图片并返回描述
+        
+        Args:
+            image_path: 图片路径
+            screenshot_mode: 是否使用截图模式（专门优化文字识别）
+        """
         if not self.is_supported_format(image_path):
             print(f"跳过不支持的格式: {image_path}")
             return None
@@ -68,6 +73,16 @@ class ImageAnalyzer:
             # 编码图片
             base64_image = self.encode_image(image_path)
             
+            # 根据模式选择提示词和token限制
+            if screenshot_mode:
+                prompt = SCREENSHOT_VISION_PROMPT
+                max_tokens = 500  # 截图模式需要更多token来描述文字内容
+                mode_text = "截图模式"
+            else:
+                prompt = VISION_PROMPT
+                max_tokens = 300
+                mode_text = "普通模式"
+            
             # 调用OpenAI Vision API
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",  # 使用cost-effective的模型
@@ -75,7 +90,7 @@ class ImageAnalyzer:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": VISION_PROMPT},
+                            {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
                                 "image_url": {
@@ -85,24 +100,29 @@ class ImageAnalyzer:
                         ]
                     }
                 ],
-                max_tokens=300
+                max_tokens=max_tokens
             )
             
             description = response.choices[0].message.content.strip()
-            print(f"✅ 已分析: {os.path.basename(image_path)}")
+            print(f"✅ 已分析（{mode_text}）: {os.path.basename(image_path)}")
             return description
             
         except Exception as e:
             print(f"❌ 分析失败 {image_path}: {str(e)}")
             return None
     
-    def batch_analyze(self, image_paths: list) -> dict:
-        """批量分析图片"""
+    def batch_analyze(self, image_paths: list, screenshot_mode: bool = False) -> dict:
+        """批量分析图片
+        
+        Args:
+            image_paths: 图片路径列表
+            screenshot_mode: 是否使用截图模式
+        """
         results = {}
         
         for i, image_path in enumerate(image_paths, 1):
             print(f"[{i}/{len(image_paths)}] 正在分析: {os.path.basename(image_path)}")
-            description = self.analyze_image(image_path)
+            description = self.analyze_image(image_path, screenshot_mode)
             if description:
                 results[image_path] = description
         

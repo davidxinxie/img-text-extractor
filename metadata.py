@@ -22,6 +22,73 @@ class MetadataWriter:
                 pass
         return os.path.basename(image_path)
     
+    def extract_keywords_screenshot(self, description: str) -> List[str]:
+        """从截图模式的结构化描述中提取关键词（专门优化文字搜索）"""
+        keywords = set()
+        
+        try:
+            lines = description.strip().split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # 截图模式的特殊字段处理
+                if line.startswith('文字内容：'):
+                    # 这是最重要的部分，包含所有可见文字
+                    text_content = line[5:].strip()
+                    if text_content:
+                        # 按空格分词，保留所有文字
+                        words = text_content.split()
+                        for word in words:
+                            word = word.strip()
+                            if len(word) >= 1:  # 截图模式保留更多短词
+                                keywords.add(word)
+                
+                elif line.startswith('应用信息：'):
+                    app_info = line[5:].strip()
+                    if app_info:
+                        keywords.update(word.strip() for word in app_info.split())
+                
+                elif line.startswith('界面元素：'):
+                    ui_elements = line[5:].strip()
+                    if ui_elements:
+                        keywords.update(elem.strip() for elem in ui_elements.split())
+                
+                elif line.startswith('功能区域：'):
+                    areas = line[5:].strip()
+                    if areas:
+                        keywords.update(area.strip() for area in areas.split())
+                
+                elif line.startswith('主要内容：'):
+                    content = line[5:].strip()
+                    if content:
+                        # 从主要内容中提取关键词
+                        content_words = content.replace('，', ' ').replace('。', ' ').split()
+                        keywords.update(word.strip() for word in content_words if len(word.strip()) > 1)
+                
+                elif line.startswith('主题色彩：'):
+                    colors = line[5:].strip()
+                    if colors:
+                        keywords.update(color.strip() for color in colors.split())
+            
+            # 截图模式不过滤短词，因为UI文字可能包含重要的短词汇
+            filtered_keywords = [
+                kw for kw in keywords 
+                if len(kw) >= 1 and not all(c in '，。、！？：；' for c in kw)
+            ]
+            
+            # 限制关键词数量，优先保留较长的关键词
+            sorted_keywords = sorted(filtered_keywords, key=len, reverse=True)
+            return sorted_keywords[:25]  # 截图模式可以有更多关键词
+            
+        except Exception as e:
+            print(f"截图关键词提取出错，使用备用方案: {e}")
+            # 备用方案：简单分词
+            words = description.replace('，', ' ').replace('。', ' ').replace('：', ' ').split()
+            return [word.strip() for word in words if len(word.strip()) >= 1][:20]
+
     def extract_keywords(self, description: str) -> List[str]:
         """从结构化描述中提取关键词"""
         keywords = set()  # 使用set避免重复
@@ -91,6 +158,31 @@ class MetadataWriter:
             words = description.replace('，', ' ').replace('。', ' ').replace('：', ' ').split()
             return [word.strip() for word in words if len(word.strip()) >= 2][:10]
     
+    def parse_description_screenshot(self, description: str) -> Dict[str, str]:
+        """解析截图模式的结构化描述，提取各个组件"""
+        parsed = {}
+        lines = description.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.startswith('主要内容：'):
+                parsed['summary'] = line[5:].strip()
+            elif line.startswith('文字内容：'):
+                parsed['text_content'] = line[5:].strip()
+            elif line.startswith('应用信息：'):
+                parsed['app_info'] = line[5:].strip()
+            elif line.startswith('界面元素：'):
+                parsed['ui_elements'] = line[5:].strip()
+            elif line.startswith('功能区域：'):
+                parsed['function_areas'] = line[5:].strip()
+            elif line.startswith('主题色彩：'):
+                parsed['colors'] = line[5:].strip()
+        
+        return parsed
+
     def parse_description(self, description: str) -> Dict[str, str]:
         """解析结构化描述，提取各个组件"""
         parsed = {}
@@ -118,7 +210,7 @@ class MetadataWriter:
         
         return parsed
 
-    def write_metadata(self, image_path: str, description: str) -> bool:
+    def write_metadata(self, image_path: str, description: str, screenshot_mode: bool = False) -> bool:
         """写入图片metadata并保留原始文件时间"""
         import tempfile
         import shutil
@@ -167,21 +259,37 @@ class MetadataWriter:
             original_atime = file_stat.st_atime  # 访问时间
             original_mtime = file_stat.st_mtime  # 修改时间
             
-            # 解析结构化描述
-            parsed = self.parse_description(description)
-            
-            # 生成关键词
-            keywords = self.extract_keywords(description)
+            # 根据模式选择解析方法
+            if screenshot_mode:
+                parsed = self.parse_description_screenshot(description)
+                keywords = self.extract_keywords_screenshot(description)
+            else:
+                parsed = self.parse_description(description)
+                keywords = self.extract_keywords(description)
             keywords_str = ', '.join(keywords) if keywords else ''
             
-            # 创建搜索优化的短描述（优先用于搜索）
+            # 根据模式创建搜索优化的短描述
             search_description_parts = []
-            if 'summary' in parsed:
-                search_description_parts.append(parsed['summary'])
-            if 'objects' in parsed:
-                search_description_parts.append(parsed['objects'])
-            if 'scene' in parsed:
-                search_description_parts.append(parsed['scene'])
+            if screenshot_mode:
+                # 截图模式：优先文字内容和应用信息
+                if 'summary' in parsed:
+                    search_description_parts.append(parsed['summary'])
+                if 'text_content' in parsed:
+                    # 截取文字内容的前部分作为搜索描述
+                    text_content = parsed['text_content']
+                    if len(text_content) > 100:
+                        text_content = text_content[:100] + "..."
+                    search_description_parts.append(text_content)
+                if 'app_info' in parsed:
+                    search_description_parts.append(parsed['app_info'])
+            else:
+                # 普通模式：原有逻辑
+                if 'summary' in parsed:
+                    search_description_parts.append(parsed['summary'])
+                if 'objects' in parsed:
+                    search_description_parts.append(parsed['objects'])
+                if 'scene' in parsed:
+                    search_description_parts.append(parsed['scene'])
             
             search_description = ' '.join(search_description_parts)
             
@@ -223,11 +331,25 @@ class MetadataWriter:
                     f'-XMP:Subject={keywords_str}',
                 ])
                 
-            # 5. 如果有文字内容，单独存储到Title字段
-            if 'text' in parsed and parsed['text'] and parsed['text'] != '无':
-                cmd.extend([
-                    f'-XMP:Title={parsed["text"]}',
-                ])
+            # 5. 根据模式处理文字内容存储
+            if screenshot_mode:
+                # 截图模式：文字内容存储到Title和Creator字段（更多搜索入口）
+                if 'text_content' in parsed and parsed['text_content']:
+                    cmd.extend([
+                        f'-XMP:Title={parsed["text_content"]}',
+                        f'-Creator={parsed["text_content"][:200]}',  # Creator字段限制长度
+                    ])
+                # 应用信息存储到Software字段
+                if 'app_info' in parsed and parsed['app_info']:
+                    cmd.extend([
+                        f'-Software={parsed["app_info"]}',
+                    ])
+            else:
+                # 普通模式：原有逻辑
+                if 'text' in parsed and parsed['text'] and parsed['text'] != '无':
+                    cmd.extend([
+                        f'-XMP:Title={parsed["text"]}',
+                    ])
             
             cmd.append(image_path)
             
@@ -337,13 +459,18 @@ class MetadataWriter:
             print(f"验证metadata时出错: {str(e)}")
             return {}
     
-    def batch_write_metadata(self, descriptions: Dict[str, str]) -> Dict[str, bool]:
-        """批量写入metadata"""
+    def batch_write_metadata(self, descriptions: Dict[str, str], screenshot_mode: bool = False) -> Dict[str, bool]:
+        """批量写入metadata
+        
+        Args:
+            descriptions: 图片路径和描述的字典
+            screenshot_mode: 是否使用截图模式
+        """
         results = {}
         
         for i, (image_path, description) in enumerate(descriptions.items(), 1):
             print(f"[{i}/{len(descriptions)}] 写入metadata: {os.path.basename(image_path)}")
-            success = self.write_metadata(image_path, description)
+            success = self.write_metadata(image_path, description, screenshot_mode)
             results[image_path] = success
         
         return results

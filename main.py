@@ -10,16 +10,24 @@ from metadata import MetadataWriter
 from config import SUPPORTED_IMAGE_FORMATS
 
 
-def find_images(directory: str, recursive: bool = True) -> list:
-    """查找目录中的图片文件"""
+def find_images(path_input: str, recursive: bool = True) -> list:
+    """查找目录中的图片文件或处理单个图片文件"""
     image_files = []
-    path = Path(directory)
+    path = Path(path_input)
     
     if not path.exists():
-        raise FileNotFoundError(f"目录不存在: {directory}")
+        raise FileNotFoundError(f"路径不存在: {path_input}")
     
+    # 处理单个图片文件
+    if path.is_file():
+        if path.suffix.lower() in SUPPORTED_IMAGE_FORMATS:
+            return [str(path)]
+        else:
+            raise ValueError(f"不支持的图片格式: {path.suffix}。支持的格式: {', '.join(SUPPORTED_IMAGE_FORMATS)}")
+    
+    # 处理目录
     if not path.is_dir():
-        raise ValueError(f"路径不是目录: {directory}")
+        raise ValueError(f"路径既不是文件也不是目录: {path_input}")
     
     # 根据是否递归选择搜索方式
     if recursive:
@@ -42,9 +50,12 @@ def main():
 使用示例:
   python main.py ~/Pictures                           # 处理Pictures目录
   python main.py ~/Pictures ~/Documents/Images        # 处理多个目录
+  python main.py ~/Pictures/image.jpg                 # 处理单个图片文件
   python main.py ~/Pictures --no-recursive            # 仅处理当前目录，不包括子目录
   python main.py ~/Pictures --dry-run                 # 预览模式，不实际写入
   python main.py ~/Pictures --verify                  # 验证已写入的metadata
+  python main.py ~/Screenshots --screenshot-mode      # 截图模式，专门识别文字内容
+  python main.py ~/Screenshots/screen.png --screenshot-mode --dry-run  # 预览单个截图识别效果
 
 注意: 首次使用前请先创建 .env 文件并设置 OPENAI_API_KEY
         """,
@@ -52,9 +63,9 @@ def main():
     )
     
     parser.add_argument(
-        'directories',
+        'paths',
         nargs='+',
-        help='要处理的图片目录路径（可以指定多个目录）'
+        help='要处理的图片目录或文件路径（可以指定多个目录/文件）'
     )
     
     parser.add_argument(
@@ -87,17 +98,30 @@ def main():
         help='安全模式：创建额外备份，更严格的文件检查'
     )
     
+    parser.add_argument(
+        '--screenshot-mode',
+        action='store_true',
+        help='截图模式：专门针对屏幕截图优化，重点识别文字内容和UI元素'
+    )
+    
     args = parser.parse_args()
     
     try:
         # 查找图片文件
         print("🔍 正在扫描图片文件...")
         all_image_files = []
-        for directory in args.directories:
-            print(f"  📂 扫描目录: {directory}")
-            dir_images = find_images(directory, not args.no_recursive)
-            all_image_files.extend(dir_images)
-            print(f"     找到 {len(dir_images)} 张图片")
+        for path in args.paths:
+            path_obj = Path(path)
+            if path_obj.is_file():
+                print(f"  📄 处理文件: {path}")
+                file_images = find_images(path, not args.no_recursive)
+                all_image_files.extend(file_images)
+                print(f"     找到 {len(file_images)} 张图片")
+            else:
+                print(f"  📂 扫描目录: {path}")
+                dir_images = find_images(path, not args.no_recursive)
+                all_image_files.extend(dir_images)
+                print(f"     找到 {len(dir_images)} 张图片")
         
         if not all_image_files:
             print("❌ 未找到支持的图片文件")
@@ -115,12 +139,20 @@ def main():
             print("\n🔍 正在验证metadata...")
             for image_file in tqdm(image_files, desc="验证进度"):
                 metadata = metadata_writer.verify_metadata(image_file)
-                # 找到图片文件属于哪个目录，用于计算相对路径
+                # 找到图片文件属于哪个路径，用于计算相对路径
                 relative_path = image_file
-                for directory in args.directories:
-                    if image_file.startswith(os.path.abspath(directory)):
-                        relative_path = os.path.relpath(image_file, directory)
-                        break
+                for path in args.paths:
+                    path_abs = os.path.abspath(path)
+                    if Path(path).is_file():
+                        # 如果是文件，直接使用文件名
+                        if os.path.abspath(image_file) == path_abs:
+                            relative_path = os.path.basename(image_file)
+                            break
+                    else:
+                        # 如果是目录，计算相对路径
+                        if image_file.startswith(path_abs):
+                            relative_path = os.path.relpath(image_file, path)
+                            break
                 
                 if metadata:
                     print(f"✅ {relative_path}: 已有metadata")
@@ -143,12 +175,20 @@ def main():
         with tqdm(total=len(image_files), desc="处理进度", unit="张") as pbar:
             for i, image_file in enumerate(image_files, 1):
                 # 显示相对路径，更清晰显示目录结构
-                # 找到图片文件属于哪个目录，用于计算相对路径
+                # 找到图片文件属于哪个路径，用于计算相对路径
                 relative_path = image_file
-                for directory in args.directories:
-                    if image_file.startswith(os.path.abspath(directory)):
-                        relative_path = os.path.relpath(image_file, directory)
-                        break
+                for path in args.paths:
+                    path_abs = os.path.abspath(path)
+                    if Path(path).is_file():
+                        # 如果是文件，直接使用文件名
+                        if os.path.abspath(image_file) == path_abs:
+                            relative_path = os.path.basename(image_file)
+                            break
+                    else:
+                        # 如果是目录，计算相对路径
+                        if image_file.startswith(path_abs):
+                            relative_path = os.path.relpath(image_file, path)
+                            break
                 
                 # 检查是否已有metadata（除非强制模式）
                 # 在dry-run模式下也跳过检查，让用户预览所有图片的分析结果
@@ -170,28 +210,45 @@ def main():
                         return 1
                 
                 print(f"\n[{i}/{len(image_files)}] 正在分析: {relative_path}")
-                description = analyzer.analyze_image(image_file)
+                description = analyzer.analyze_image(image_file, args.screenshot_mode)
                 
                 if description:
                     analyzed_count += 1
                     
-                    # 解析结构化描述并显示要写入的metadata信息
-                    parsed = metadata_writer.parse_description(description)
-                    keywords = metadata_writer.extract_keywords(description)
+                    # 根据模式解析结构化描述并显示要写入的metadata信息
+                    if args.screenshot_mode:
+                        parsed = metadata_writer.parse_description_screenshot(description)
+                        keywords = metadata_writer.extract_keywords_screenshot(description)
+                    else:
+                        parsed = metadata_writer.parse_description(description)
+                        keywords = metadata_writer.extract_keywords(description)
                     keywords_str = ', '.join(keywords) if keywords else ''
                     
                     # 收集关键词用于最终示例
                     if keywords:
                         all_keywords.update(keywords[:5])  # 每张图片取前5个关键词
                     
-                    # 构建搜索优化的短描述
+                    # 根据模式构建搜索优化的短描述
                     search_description_parts = []
-                    if 'summary' in parsed:
-                        search_description_parts.append(parsed['summary'])
-                    if 'objects' in parsed:
-                        search_description_parts.append(parsed['objects'])
-                    if 'scene' in parsed:
-                        search_description_parts.append(parsed['scene'])
+                    if args.screenshot_mode:
+                        # 截图模式：优先显示文字内容和应用信息
+                        if 'summary' in parsed:
+                            search_description_parts.append(parsed['summary'])
+                        if 'text_content' in parsed:
+                            text_content = parsed['text_content']
+                            if len(text_content) > 100:
+                                text_content = text_content[:100] + "..."
+                            search_description_parts.append(text_content)
+                        if 'app_info' in parsed:
+                            search_description_parts.append(parsed['app_info'])
+                    else:
+                        # 普通模式：原有逻辑
+                        if 'summary' in parsed:
+                            search_description_parts.append(parsed['summary'])
+                        if 'objects' in parsed:
+                            search_description_parts.append(parsed['objects'])
+                        if 'scene' in parsed:
+                            search_description_parts.append(parsed['scene'])
                     search_description = ' '.join(search_description_parts)
                     
                     print(f"  📝 将要写入的metadata字段:")
@@ -237,8 +294,16 @@ def main():
                         print(f"    Keywords: {keywords_display}")
                         print(f"    XMP:Subject: {keywords_display}")
                     
-                    if 'text' in parsed and parsed['text'] and parsed['text'] != '无':
-                        format_multiline_field("XMP:Title", parsed['text'], 80)
+                    # 根据模式显示特殊字段
+                    if args.screenshot_mode:
+                        if 'text_content' in parsed and parsed['text_content']:
+                            format_multiline_field("XMP:Title", parsed['text_content'], 100)
+                            print(f"    Creator: {parsed['text_content'][:50]}{'...' if len(parsed['text_content']) > 50 else ''}")
+                        if 'app_info' in parsed and parsed['app_info']:
+                            print(f"    Software: {parsed['app_info']}")
+                    else:
+                        if 'text' in parsed and parsed['text'] and parsed['text'] != '无':
+                            format_multiline_field("XMP:Title", parsed['text'], 80)
                     
                     print(f"  ✅ 分析完成 (共{len(keywords)}个关键词)")
                     
@@ -250,14 +315,20 @@ def main():
                     
                     # 立即写入metadata
                     print(f"  💾 正在写入metadata...")
-                    # 临时设置当前处理目录，用于显示相对路径
-                    current_base_dir = None
-                    for directory in args.directories:
-                        if image_file.startswith(os.path.abspath(directory)):
-                            current_base_dir = directory
-                            break
-                    metadata_writer._current_base_dir = current_base_dir
-                    if metadata_writer.write_metadata(image_file, description):
+                    # 临时设置当前处理路径，用于显示相对路径
+                    current_base_path = None
+                    for path in args.paths:
+                        path_abs = os.path.abspath(path)
+                        if Path(path).is_file():
+                            if os.path.abspath(image_file) == path_abs:
+                                current_base_path = os.path.dirname(path)
+                                break
+                        else:
+                            if image_file.startswith(path_abs):
+                                current_base_path = path
+                                break
+                    metadata_writer._current_base_dir = current_base_path
+                    if metadata_writer.write_metadata(image_file, description, args.screenshot_mode):
                         success_count += 1
                 else:
                     print(f"  ❌ 分析失败")
@@ -281,8 +352,19 @@ def main():
         
         # 触发Spotlight重新索引
         print("\n🔄 触发Spotlight重新索引...")
-        for directory in args.directories:
-            metadata_writer.trigger_spotlight_reindex(directory)
+        indexed_dirs = set()
+        for path in args.paths:
+            if Path(path).is_file():
+                # 对文件所在目录进行重新索引
+                dir_path = os.path.dirname(path)
+                if dir_path not in indexed_dirs:
+                    metadata_writer.trigger_spotlight_reindex(dir_path)
+                    indexed_dirs.add(dir_path)
+            else:
+                # 对目录进行重新索引
+                if path not in indexed_dirs:
+                    metadata_writer.trigger_spotlight_reindex(path)
+                    indexed_dirs.add(path)
         
         # 总结
         print(f"\n📊 处理完成!")
