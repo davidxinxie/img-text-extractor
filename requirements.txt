@@ -3,3 +3,4 @@ Pillow>=10.0.0
 pillow-heif>=0.10.0  # HEIC/HEIF support for Pillow
 python-dotenv>=1.0.0
 tqdm>=4.65.0
+requests>=2.31.0  # For GitHub API integration
