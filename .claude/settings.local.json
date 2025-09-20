@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(exiftool:*)",
+      "Bash(python:*)",
+      "Read(/Users/xiexin/Library/Mobile Documents/com~apple~CloudDocs/Pictures/2025/2025-01 TikTok refugee/**)",
+      "Read(/Users/xiexin/Library/Mobile Documents/com~apple~CloudDocs/Pictures/2025/2025-01 TikTok refugee/**)",
+      "Bash(chmod:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_type",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote set-url:*)",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_file_upload",
+      "mcp__BrowserUse__browser_navigate",
+      "mcp__playwright__browser_close",
+      "mcp__playwright__browser_wait_for",
+      "Bash(./main.py test_screenshots:*)",
+      "Read(//Users/xiexin/Desktop/**)",
+      "Bash(./main.py:*)",
+      "Bash(cat:*)",
+      "Bash(pip install:*)",
+      "Bash(source .env)",
+      "Read(//Users/xiexin/Library/Mobile Documents/com~apple~CloudDocs/Pictures/2025/2025-01 TikTok refugee/**)",
+      "Bash(./github_sync.py:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
